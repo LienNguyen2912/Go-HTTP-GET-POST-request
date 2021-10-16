@@ -91,15 +91,15 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 )
 
 func main() {
 	// create https://jsonplaceholder.typicode.com/comments?postId=2 request
-	postId := 2
-	path := fmt.Sprintf("https://jsonplaceholder.typicode.com/comments?%s%d", "postId=", postId)
+	params := url.Values{}
+	params.Add("postId", "2")
+	resp, err := http.Get("https://jsonplaceholder.typicode.com/comments?" + params.Encode())
 
-	// issue the get request
-	resp, err := http.Get(path)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -111,6 +111,9 @@ func main() {
 	fmt.Println(string(body))
 }
 ```
+The output has 5 records as below</br>
+![get_para](https://user-images.githubusercontent.com/73010204/137586056-e801baed-b998-4b4e-a3f6-95fab2428570.PNG)</br>
+
 ## Custom GET request
 In the previous pgrogram, we have used the _http.Get_ which is simple and quickly make GET requests. But what if we want to custom something like add a timeout? _http.Client_ comes to help.</br>
 ```sh
@@ -145,17 +148,27 @@ func main() {
 }
 ```
 We created our own _http.Client_, specify Timeout property, then call _.Do(request)_. </br>
-How about custom request having query parameters? Access _URL.Query_ property of request then call _Add_ method, see the example belows to issue https://jsonplaceholder.typicode.com/comments?postId=2 Get request. The output is same as the previous example.
-```
+How about custom request having query parameters? Access _URL.Query_ property of request then call _Add_ method, see the example belows to issue https://jsonplaceholder.typicode.com/comments?postId=2 Get request.</br>
+_We also add  **_json.Unmarshal_** invocation to get the first record only, for fun!_
+```sh
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"time"
 )
+
+type Posts []struct {
+	PostId int    `json:"postId"`
+	ID     int    `json:"id"`
+	Name   string `json:"name"`
+	Email  string `json:"email"`
+	Body   string `json:"body"`
+}
 
 func main() {
 	timeout := time.Duration(5 * time.Second)
@@ -181,8 +194,18 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	log.Println(string(body))
+	// log.Println(string(body)) // not print all the body received
+	
+	// Unmarshal result
+	posts := Posts{}
+	err = json.Unmarshal(body, &posts)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	log.Printf("Name of 1st record: %s", posts[0].Name)
 }
-
+```
+Here the output is</br>
+![customeAddMarshal](https://user-images.githubusercontent.com/73010204/137586594-7119a763-0bba-48c3-91dd-8c62b2390d2f.PNG)</br>
 
 
