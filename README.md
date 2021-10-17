@@ -208,4 +208,138 @@ func main() {
 Here the output is</br>
 ![customeAddMarshal](https://user-images.githubusercontent.com/73010204/137586594-7119a763-0bba-48c3-91dd-8c62b2390d2f.PNG)</br>
 
+## Go POST 
+The _http.Post_ function takes three parameters.
+- The URL address of the server
+- The content type of the body as a string, for example, _application/json_
+- The request body whose type is _io.Reader_. To create a request body from json format, we need
+	- Encode JSON data by _Marshall_ invocation. We will get a []bytes and error non nil (if any)
+	- Convert the encoded JSON data to a type implemented by the _io.Reader_ interface by using _bytes.NewBuffer_ function
+
+```sh
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"io/ioutil"
+	"log"
+	"net/http"
+)
+
+func main() {
+	//Encode the data
+	postBody, err := json.Marshal(map[string]string{
+		"userId": "100",
+		"id":     "101",
+		"title":  "ping ping ping",
+		"body":   "Happiness is an attitude. We either make ourselves miserable, or happy and strong. The amount of work is the same",
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	responseBody := bytes.NewBuffer(postBody)
+
+	resp, err := http.Post("https://jsonplaceholder.typicode.com/posts", "application/json", responseBody)
+
+	if err != nil {
+		log.Fatalf("An error occured %v", err)
+	}
+	defer resp.Body.Close()
+	//Read the response body
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	log.Printf(string(body))
+}
+```
+If everything works well we should have the posted content in the _Body_ property of _http.Post_ 's returned value</br>
+![post1](https://user-images.githubusercontent.com/73010204/137624048-554e973f-9d87-4f1a-8998-cf94d6f6218b.PNG)</br>
+## Go POST FORM
+We can use the _http.PostForm_ to submit a form easily. 
+```sh
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"net/url"
+)
+
+func main() {
+
+	data := url.Values{
+		"userId": {"1"},
+		"id":     {"3"},
+		"title":  {"sunt aut facere repellat provident occaecati excepturi optio reprehenderit"},
+		"body":   {"HTTP test server accepting GET/POST requests"},
+	}
+
+	resp, err := http.PostForm("https://httpbin.org/post", data)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var res map[string]interface{}
+
+	json.NewDecoder(resp.Body).Decode(&res)
+
+	fmt.Println(res["form"])
+}
+```
+The program will print</br></br>
+![postForm](https://user-images.githubusercontent.com/73010204/137624586-663716a2-2868-46e1-9323-db05ed2ae693.PNG)</br></br>
+We could use _ioutil.ReadAll_ like the examples above to first read the data into memory and then call _json.Unmarshall_. 
+```sh
+package main
+
+import (
+	"encoding/json"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"net/url"
+)
+
+type Post struct {
+	Userid string `json:"userId"`
+	ID     int    `json:"id"`
+	Title  string `json:"title"`
+	Body   string `json:"body"`
+}
+
+func main() {
+
+	data := url.Values{}
+	data.Add("title", "sunt aut facere repellat provident occaecati excepturi optio reprehenderit")
+	data.Add("body", "HTTP test server accepting GET/POST requests")
+	data.Add("userId", "999")
+	data.Add("id", "9")
+
+	resp, err := http.PostForm("https://jsonplaceholder.typicode.com/posts", data)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println(string(body))
+	post := Post{}
+	err = json.Unmarshal(body, &post)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Posted title:", post.Title)
+}
+```
+We 'll get</br>
+![postForm_ioutil](https://user-images.githubusercontent.com/73010204/137626123-251fb547-0385-468b-a488-f7dfcd54d8c9.PNG)</br>
+That's it!
 
