@@ -1,4 +1,4 @@
-# Go HTTP GET/POST request
+# Go HTTP Client/Server
 ## GET
 Make a http GET request to https://jsonplaceholder.typicode.com/posts/1 and print out the result
 ```sh
@@ -342,4 +342,94 @@ func main() {
 We 'll get</br>
 ![postForm_ioutil](https://user-images.githubusercontent.com/73010204/137626123-251fb547-0385-468b-a488-f7dfcd54d8c9.PNG)</br>
 That's it!
+## Create a simple http server
+## Rendering Plain Text - Serving a File - Respond to a POST request with form submission
+```sh
+package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+	"strconv"
+	"sync"
+)
+
+var counter int
+var mutex = &sync.Mutex{}
+
+func formHandler(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		fmt.Fprintf(w, "ParseForm() err: %v", err)
+		return
+	}
+	fmt.Fprintf(w, "POST request successful\n\n")
+	fname := r.FormValue("fname")
+	lname := r.FormValue("lname")
+	fmt.Fprintf(w, "First name = %s\n", fname)
+	fmt.Fprintf(w, "Last name = %s\n", lname)
+}
+
+func plainHtmlHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "<h1>Response HTML plain text</h1>"+
+		"<form action=\"/form\" method=\"POST\">"+
+		"<label for=\"fname\">First name:</label><br>"+
+		"<input type=\"text\" id=\"fname\" name=\"fname\" value=\"John\"><br>"+
+		"<label for=\"lname\">Last name:</label><br>"+
+		"<input type=\"text\" id=\"lname\" name=\"lname\" value=\"Doe\"><br><br>"+
+		"<input type=\"submit\" value=\"Submit\">"+
+		"</form>")
+}
+func pingHandler(w http.ResponseWriter, r *http.Request) {
+	mutex.Lock()
+	counter++
+	fmt.Fprintf(w, "ping http://localhost:8081 count:%s", strconv.Itoa(counter))
+	mutex.Unlock()
+}
+func main() {
+	// response some text
+	http.HandleFunc("/hi", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "Hello from http://localhost:8081")
+	})
+	// response plain html
+	http.HandleFunc("/plainHtml", plainHtmlHandler)
+	
+	// response a static file
+	http.Handle("/", http.FileServer(http.Dir("./static")))
+	
+	// handle POST request
+	http.HandleFunc("/form", formHandler)
+	
+	// response ping for fun
+	http.HandleFunc("/ping", pingHandler)
+	
+	fmt.Printf("Starting server at port 8081...\n")
+	if err := http.ListenAndServe(":8081", nil); err != nil {
+		log.Fatal(err)
+	}
+}
+```
+In the example above, we’ve created our own http://localhost:8081 server. Execute it and hopefully see it works</br>
+- Rendering some text _http://localhost:8081/hi_</br>
+![hi](https://user-images.githubusercontent.com/73010204/138557099-8e9e5327-be8c-4195-8dbf-d469005501bc.PNG)</br>
+- Rendering a plain html content _http://localhost:8081/plainHtml_</br>
+![plainTHML](https://user-images.githubusercontent.com/73010204/138557101-f8afa422-f70c-43fa-8381-833d9713a76e.PNG)</br>
+- Handling a Post request and rendering some text _http://localhost:8081/form_</br>
+![postRes](https://user-images.githubusercontent.com/73010204/138557104-b12cec75-98d6-4a6c-a046-44a1521cbaa7.PNG)</br>
+- Rendering a static html file<br>
+![html](https://user-images.githubusercontent.com/73010204/138557115-022668d7-753e-46cd-8247-5c2b01c629dd.PNG)<br>
+Here is the folder structure I used</br>
+![staticF](https://user-images.githubusercontent.com/73010204/138557706-751fa155-5533-46dd-8332-461c37ea9d47.png)</br>
+- Finally, adding a mutex implementation for fun! Whenever user accesses _http://localhost:8081/ping_ the server response a number increased by 1 continuously</br>
+![ping](https://user-images.githubusercontent.com/73010204/138557120-eaf8712d-040e-470f-b785-0c6618e7f68a.PNG)</br>
+
+**What to notice:**
+- http.ListenAndServer() starts the server and listens on the TCP network address :8081. This function blocks blocks the current goroutine.
+- ListenAndServe specifies the port to listen on as the first argument and an http.Handler as its second argument. If the handler is nil, DefaultServeMux is used.
+>While DefaultServeMux is okay for toy programs, you should avoid it in your production code. This is because it is accessible to any package that your application imports, including third-party packages. Therefore, it could potentially be exploited to expose a malicious handler to the web if a package becomes compromised.
+So, what's the alternative? A locally scoped http.ServeMux!
+Refer https://www.honeybadger.io/blog/go-web-services/
+- If there are a lot of static HTML files created by hand, _html/template_ package would be prefered.
+## Rendering JSON
+
 
