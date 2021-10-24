@@ -681,7 +681,7 @@ The output may vary each time executing.</br>
 ![asynGet](https://user-images.githubusercontent.com/73010204/138594181-baf7c251-30dc-437e-8ee3-de9edc44db5e.PNG)</br>
 ## Summary
 We have implemented a simple HTML client/server that
-- Issue GET requests to a server
+- Issue GET requests
 - Issue GET requests having parameter
 - Issue POST requests
 - Customize HTML requests
