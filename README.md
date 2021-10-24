@@ -255,7 +255,7 @@ func main() {
 	log.Printf(string(body))
 }
 ```
-If everything works well we should have the posted content in the _Body_ property of _http.Post_ 's returned value</br>
+The program will print</br>
 ![post1](https://user-images.githubusercontent.com/73010204/137624048-554e973f-9d87-4f1a-8998-cf94d6f6218b.PNG)</br>
 ## Go POST FORM
 We can use the _http.PostForm_ to submit a form easily. 
@@ -420,7 +420,7 @@ In the example above, we’ve created our own http://localhost:8081 server. Exec
 ![html](https://user-images.githubusercontent.com/73010204/138557115-022668d7-753e-46cd-8247-5c2b01c629dd.PNG)<br>
 Here is the folder structure I used</br>
 ![staticF](https://user-images.githubusercontent.com/73010204/138557706-751fa155-5533-46dd-8332-461c37ea9d47.png)</br>
-- Finally, adding a mutex implementation for fun! Whenever user accesses _http://localhost:8081/ping_ the server response a number increased by 1 continuously</br>
+- Finally, adding a mutex implementation for fun! Whenever user accesses _http://localhost:8081/ping_ the server responses a number increased by 1 continuously</br>
 ![ping](https://user-images.githubusercontent.com/73010204/138557120-eaf8712d-040e-470f-b785-0c6618e7f68a.PNG)</br>
 
 **What to notice:**
@@ -431,5 +431,263 @@ So, what's the alternative? A locally scoped http.ServeMux!
 Refer https://www.honeybadger.io/blog/go-web-services/
 - If there are a lot of static HTML files created by hand, _html/template_ package would be prefered.
 ## Rendering JSON
+Firstly, we need to prepare json data. There are many ways to do it. We can create a variable and assign json data to it as below
+```sh
+type Post struct {
+	PostId int    `json:"postId"`
+	Id     int    `json:"id"`
+	Name   string `json:"name"`
+	Email  string `json:"email"`
+	Body   string `json:"body"`
+}
+func createPosts() []Post {
+	PostsSlice := make([]Post, 0, 2)
+	PostsSlice = append(PostsSlice, Post{
+		PostId: 0,
+		Id:     0,
+		Name:   "eaque et deleniti atque tenetur ut quo ut",
+		Email:  "Hautdfsfsfsden@althea.biz",
+		Body:   "voluptate iusto quis nobis reprehenderit ipsum amet nulla\nquia quas dolores velit et non\naut quia necessitatibus\nnostrum quaerat nulla et accusamus nisi facilis",
+	})
+	PostsSlice = append(PostsSlice, Post{
+		PostId: 1,
+		Id:     1,
+		Name:   "odio adipisci rerum aut animi",
+		Email:  "Nikita@garfield.biz",
+		Body:   "uia molestiae reprehenderit quasi aspernatur\naut expedita occaecati aliquam eveniet laudantium\nomnis quibusdam delectus saepe quia accusamus maiores nam est\ncum et",
+	})
+	return PostsSlice
+}
+func usersHandler(w http.ResponseWriter, r *http.Request) {
+	posts := createPosts()
+	js, err := json.Marshal(posts)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(js)
+}
+func main() {
+	http.HandleFunc("/users", usersHandler)
 
+	fmt.Printf("Starting server at port 8082...\n")
+	if err := http.ListenAndServe(":8082", nil); err != nil {
+		log.Fatal(err)
+	}
+}
+```
+Or we can read JSON data from a file. </br>
+This is users.json data. Refer https://jsonplaceholder.typicode.com/posts
+```
+[
+    {
+    "userId": 0,
+    "id": 0,
+    "title": "sunt aut facere repellat provident occaecati excepturi optio reprehenderit",
+    "body": "quia et suscipit\nsuscipit recusandae consequuntur expedita et cum\nreprehenderit molestiae ut ut quas totam\nnostrum rerum est autem sunt rem eveniet architecto"
+  },
+  {
+    "userId": 1,
+    "id": 1,
+    "title": "qui est esse",
+    "body": "est rerum tempore vitae\nsequi sint nihil reprehenderit dolor beatae ea dolores neque\nfugiat blanditiis voluptate porro vel nihil molestiae ut reiciendis\nqui aperiam non debitis possimus qui neque nisi nulla"
+  }
+]
+```
+Next is our simple server 
+```sh
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"os"
+	"strconv"
+	"sync"
+)
+
+type Post struct {
+	UserId int    `json:"userId"`
+	Id     int    `json:"id"`
+	Name   string `json:"name"`
+	Email  string `json:"email"`
+	Body   string `json:"body"`
+}
+
+var counter int
+var mutex = &sync.Mutex{}
+
+func process(w http.ResponseWriter, r *http.Request) {
+	vars := r.URL.Query()
+	if id, err := strconv.Atoi(vars.Get("Id")); err == nil {
+		log.Printf("Response a single post by Id = %d\n", id)
+		idHandler(id, w, r)
+		return
+	}
+	keys, ok := r.URL.Query()["Name"]
+	if ok && len(keys[0]) >= 1 {
+		log.Println("Response multiple posts by Name = " + string(keys[0]))
+		paraNameHandler(w, r)
+		return
+	}
+	log.Println("Response all users")
+	usersHandler(w, r)
+}
+func postHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method is not POST.", http.StatusNotFound)
+		return
+	}
+	fmt.Fprintf(w, "POST request successful\n")
+}
+
+func usersHandler(w http.ResponseWriter, r *http.Request) {
+	posts := readJsonFile()
+	js, err := json.Marshal(posts)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(js)
+}
+func idHandler(id int, w http.ResponseWriter, r *http.Request) {
+	posts := readJsonFile()
+	if (id >= len(posts)) || (id < 0) {
+		http.Error(w, "Requested index is out of range!", http.StatusInternalServerError)
+		return
+	}
+	js, err := json.Marshal(posts[id])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(js)
+}
+
+func paraNameHandler(w http.ResponseWriter, r *http.Request) {
+	posts := readJsonFile()
+	js, err := json.Marshal(posts[1:3])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(js)
+}
+func pingHandler(w http.ResponseWriter, r *http.Request) {
+	mutex.Lock()
+	counter++
+	fmt.Fprintf(w, "ping http://localhost:8082 count:%s", strconv.Itoa(counter))
+	mutex.Unlock()
+}
+func readJsonFile() []Post {
+	filename, err := os.Open("users.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer filename.Close()
+	data, err := ioutil.ReadAll(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var result []Post
+	jsonErr := json.Unmarshal(data, &result)
+	if jsonErr != nil {
+		log.Fatal(jsonErr)
+	}
+	return result
+}
+func main() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "Hello, %s!\n", r.URL.Path[1:])
+	})
+
+	http.HandleFunc("/users", process)
+
+	http.HandleFunc("/form", postHandler)
+
+	// response ping for fun
+	http.HandleFunc("/ping", pingHandler)
+
+	fmt.Printf("Starting server at port 8082...\n")
+	if err := http.ListenAndServe(":8082", nil); err != nil {
+		log.Fatal(err)
+	}
+}
+```
+Let's execute it and hopefully see it works
+- Response to GET request without parameter _http://localhost:8082/users_</br>
+![users](https://user-images.githubusercontent.com/73010204/138593371-75af3fe4-9d1f-4db4-9832-c6549e1eaf1b.PNG)</br>
+- Response to GET request with parameter _http://localhost:8082/users?Id=1_</br>
+![userId](https://user-images.githubusercontent.com/73010204/138593458-ad684c08-9c38-476f-9ce8-fffd8836cb63.PNG)</br>
+- If there is POST request, _http://localhost:8082/form , just rendering a "POST request successful" message. 
+- Finally, adding a mutex implementation for fun! Whenever user accesses _http://localhost:8082/ping_ the server responses a number increased by 1 continuously</br>
+![pingping](https://user-images.githubusercontent.com/73010204/138593548-8b96ae80-7448-42ff-8515-89d8ddfddfaf.PNG)</br>
+## Async GET requests
+To the multiple local servers above, say we create multiple asynchronous HTTP requests to them.
+```sh
+package main
+
+import (
+	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"sync"
+)
+
+func main() {
+
+	urls := []string{
+		"http://localhost:8081/ping",
+		"http://localhost:8082/ping",
+	}
+
+	var wg sync.WaitGroup
+	for i := 1; i < 10; i++ {
+		for _, url := range urls {
+			wg.Add(1)
+			go func(url string) {
+				defer wg.Done()
+				content := doGetRequest(url)
+				fmt.Println(content)
+			}(url)
+		}
+	}
+	wg.Wait()
+}
+
+func doGetRequest(url string) (content string) {
+	resp, err := http.Get(url)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return string(body)
+}
+```
+The output may vary each time executing.</br>
+![asynGet](https://user-images.githubusercontent.com/73010204/138594181-baf7c251-30dc-437e-8ee3-de9edc44db5e.PNG)</br>
+## Summary
+We have implemented a simple HTML client/server that
+- Issue GET requests to a server
+- Issue GET requests having parameter
+- Issue POST requests
+- Customize HTML requests
+- Rendering a static file
+- Rendering plain HTML text
+- Rendering Json data
+- Retrieve paramaters from a request
+- Reponse to a POST request and parser POST form
+- Async GET request.
